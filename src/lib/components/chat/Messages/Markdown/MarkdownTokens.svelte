@@ -132,11 +132,11 @@
 		{/if}
 	{:else if token.type === 'table'}
 		<div class="relative w-full group mb-2">
-			<div class="scrollbar-hidden relative overflow-x-auto max-w-full">
-				<table
-					class=" w-full text-sm text-start text-gray-500 dark:text-gray-400 max-w-full rounded-xl"
-					dir="auto"
-				>
+		<div class="scrollbar-hidden relative overflow-x-auto max-w-full" dir="auto">
+			<span class="sr-only" aria-hidden="true">{token.header[0]?.text || ''}</span>
+			<table
+				class=" w-full text-sm text-start text-gray-500 dark:text-gray-400 max-w-full rounded-xl"
+			>
 					<thead
 						class="text-xs text-gray-700 uppercase bg-white dark:bg-gray-900 dark:text-gray-400 border-none"
 					>
@@ -146,6 +146,7 @@
 									scope="col"
 									class="px-2.5! py-2! cursor-pointer border-b border-gray-100! dark:border-gray-800!"
 									style={token.align[headerIdx] ? `text-align: ${token.align[headerIdx]}` : ''}
+									dir="auto"
 								>
 									<div class="gap-1.5 text-start">
 										<div class="shrink-0 break-normal">
@@ -173,8 +174,9 @@
 											? ''
 											: 'border-b border-gray-50! dark:border-gray-850!'}"
 										style={token.align[cellIdx] ? `text-align: ${token.align[cellIdx]}` : ''}
+										dir="auto"
 									>
-										<div class="break-normal">
+										<div class="break-normal text-start">
 											<MarkdownInlineTokens
 												id={`${id}-${tokenIdx}-row-${rowIdx}-${cellIdx}`}
 												tokens={cell.tokens}
