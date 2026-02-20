@@ -1,0 +1,109 @@
+name: Sync fork with upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  sync-dev:
+    runs-on: ubuntu-latest
+    if: github.repository != 'open-webui/open-webui'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream dev
+        run: |
+          git remote add upstream https://github.com/open-webui/open-webui.git
+          git fetch upstream dev
+
+      - name: Fast-forward merge upstream/dev
+        run: git merge --ff-only upstream/dev
+
+      - name: Push to origin
+        run: git push origin dev
+
+  sync-main:
+    runs-on: ubuntu-latest
+    if: github.repository != 'open-webui/open-webui'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream main
+        run: |
+          git remote add upstream https://github.com/open-webui/open-webui.git
+          git fetch upstream main
+
+      - name: Fast-forward merge upstream/main
+        run: git merge --ff-only upstream/main
+
+      - name: Push to origin
+        run: git push origin main
+
+  sync-personal:
+    runs-on: ubuntu-latest
+    if: github.repository != 'open-webui/open-webui'
+    needs: [sync-dev]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout personal branch
+        uses: actions/checkout@v4
+        with:
+          ref: personal
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream dev
+        run: |
+          git remote add upstream https://github.com/open-webui/open-webui.git
+          git fetch upstream dev
+
+      - name: Rebase onto upstream/dev
+        run: |
+          if ! git rebase upstream/dev; then
+            # Auto-resolve docker-build.yaml — always keep our custom version
+            if git diff --name-only --diff-filter=U | grep -qx '.github/workflows/docker-build.yaml'; then
+              git checkout --theirs .github/workflows/docker-build.yaml
+              git add .github/workflows/docker-build.yaml
+            fi
+            # Fail if other files still have conflicts
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "::error::Unresolvable rebase conflicts"
+              git rebase --abort
+              exit 1
+            fi
+            GIT_EDITOR=true git rebase --continue
+          fi
+
+      - name: Force push
+        run: git push --force origin personal
