@@ -252,6 +252,8 @@ def get_citation_source_from_tool_result(
         if tool_name == 'search_web':
             # Parse JSON array: [{"title": "...", "link": "...", "snippet": "..."}]
             results = tool_result
+            if not isinstance(results, list):
+                return []
             documents = []
             metadata = []
 
