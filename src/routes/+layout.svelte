@@ -35,7 +35,8 @@
 		showControls,
 		showFileNavPath,
 		showFileNavDir,
-		pyodideWorker
+		pyodideWorker,
+		pyodideExecutionCount
 	} from '$lib/stores';
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
@@ -476,7 +477,10 @@
 		} else if (data?.session_id === $socket.id) {
 			if (type === 'execute:python') {
 				console.log('execute:python', data);
-				executePythonAsWorker(data.id, data.code, cb, data.files || []);
+				executePythonAsWorker(data.id, data.code, (result) => {
+					cb(result);
+					pyodideExecutionCount.update((n) => n + 1);
+				}, data.files || []);
 			} else if (type === 'execute:tool') {
 				console.log('execute:tool', data);
 				executeTool(data, cb);

@@ -74,6 +74,7 @@ export const terminalServers = writable([]);
 
 // Persistent Pyodide worker for code interpreter FS
 export const pyodideWorker: Writable<Worker | null> = writable(null);
+export const pyodideExecutionCount: Writable<number> = writable(0);
 
 export const banners: Writable<Banner[]> = writable([]);
 

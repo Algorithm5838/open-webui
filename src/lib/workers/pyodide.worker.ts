@@ -189,6 +189,13 @@ async function executeCode(
 		persistFS();
 	}
 
+	// Ensure working directory is /mnt/uploads so relative file writes appear in the panel
+	try {
+		await self.pyodide.runPythonAsync("import os; os.chdir('/mnt/uploads')");
+	} catch (e) {
+		console.warn('[pyodide] chdir to /mnt/uploads failed:', e);
+	}
+
 	try {
 		// check if matplotlib is imported in the code
 		if (code.includes('matplotlib')) {

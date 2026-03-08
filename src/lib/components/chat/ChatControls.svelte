@@ -20,7 +20,8 @@
 		settings,
 		showFileNavPath,
 		selectedTerminalId,
-		user
+		user,
+		pyodideWorker
 	} from '$lib/stores';
 
 	import { uploadFile } from '$lib/apis/files';
@@ -73,7 +74,8 @@
 	$: showControlsTab = $user?.role === 'admin' || ($user?.permissions?.chat?.controls ?? true);
 	$: showFilesTab =
 		!!$selectedTerminalId ||
-		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
+		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter') ||
+		!!$pyodideWorker;
 	$: showOverviewTab = hasMessages;
 
 	// Tab fallback: if active tab becomes hidden, switch to next available
@@ -361,7 +363,7 @@
 								/>
 							{:else if activeTab === 'files' && $selectedTerminalId}
 								<FileNav onAttach={handleTerminalAttach} />
-							{:else if activeTab === 'files' && codeInterpreterEnabled}
+							{:else if activeTab === 'files' && (codeInterpreterEnabled || !!$pyodideWorker)}
 								<PyodideFileNav />
 							{:else}
 								<Controls embed={true} {models} bind:chatFiles bind:params />
@@ -512,7 +514,7 @@
 									/>
 								{:else if activeTab === 'files' && $selectedTerminalId}
 									<FileNav onAttach={handleTerminalAttach} overlay={dragged} />
-								{:else if activeTab === 'files' && codeInterpreterEnabled}
+								{:else if activeTab === 'files' && (codeInterpreterEnabled || !!$pyodideWorker)}
 									<PyodideFileNav overlay={dragged} />
 								{:else}
 									<Controls embed={true} {models} bind:chatFiles bind:params />

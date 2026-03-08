@@ -4,7 +4,7 @@
 
 <script lang="ts">
 	import { getContext, onMount, tick } from 'svelte';
-	import { pyodideWorker } from '$lib/stores';
+	import { pyodideWorker, pyodideExecutionCount } from '$lib/stores';
 	import PyodideWorkerConstructor from '$lib/workers/pyodide.worker?worker';
 	import type { FileEntry } from '$lib/apis/terminal';
 
@@ -45,6 +45,12 @@
 	let newFileInput: HTMLInputElement;
 
 	let _reqId = 0;
+	let _mounted = false;
+
+	// Auto-refresh the file listing after each code execution
+	$: if (_mounted && $pyodideExecutionCount > 0 && !selectedFile) {
+		loadDir(currentPath);
+	}
 
 	const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'avif']);
 	const isImage = (path: string) => IMAGE_EXTS.has(path.split('.').pop()?.toLowerCase() ?? '');
@@ -285,6 +291,7 @@
 	onMount(() => {
 		ensureWorker();
 		loadDir(currentPath);
+		_mounted = true;
 	});
 </script>
 
