@@ -771,27 +771,18 @@
 				}
 
 				const compressImageHandler = async (imageUrl, settings = {}, config = {}) => {
-					// Quick shortcut so we don’t do unnecessary work.
 					const settingsCompression = settings?.imageCompression ?? false;
 					const configWidth = config?.file?.image_compression?.width ?? null;
 					const configHeight = config?.file?.image_compression?.height ?? null;
 
-					// If neither settings nor config wants compression, return original URL.
-					if (!settingsCompression && !configWidth && !configHeight) {
-						return imageUrl;
-					}
-
-					// Default to null (no compression unless set)
 					let width = null;
 					let height = null;
 
-					// If user/settings want compression, pick their preferred size.
 					if (settingsCompression) {
 						width = settings?.imageCompressionSize?.width ?? null;
 						height = settings?.imageCompressionSize?.height ?? null;
 					}
 
-					// Apply config limits as an upper bound if any
 					if (configWidth && (width === null || width > configWidth)) {
 						width = configWidth;
 					}
@@ -799,11 +790,8 @@
 						height = configHeight;
 					}
 
-					// Do the compression if required
-					if (width || height) {
-						return await compressImage(imageUrl, width, height);
-					}
-					return imageUrl;
+					// Single-pass: resize (if needed) and convert to WebP
+					return await compressImage(imageUrl, width, height, 'image/webp', 0.9);
 				};
 
 				let reader = new FileReader();
@@ -811,7 +799,7 @@
 				reader.onload = async (event) => {
 					let imageUrl = event.target.result;
 
-					// Compress the image if settings or config require it
+					// Compress and convert to WebP in a single canvas pass
 					imageUrl = await compressImageHandler(imageUrl, $settings, $config);
 
 					if ($temporaryChatEnabled) {
@@ -824,9 +812,13 @@
 						];
 					} else {
 						const blob = await (await fetch(imageUrl)).blob();
-						const compressedFile = new File([blob], file.name, { type: file.type });
+						const webpFile = new File(
+							[blob],
+							file.name.replace(/\.[^.]+$/, '.webp'),
+							{ type: 'image/webp' }
+						);
 
-						uploadFileHandler(compressedFile, false);
+						uploadFileHandler(webpFile, false);
 					}
 				};
 
