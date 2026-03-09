@@ -370,6 +370,20 @@ export const compressImage = async (imageUrl, maxWidth, maxHeight) => {
 		img.src = imageUrl;
 	});
 };
+export const convertToWebP = (imageUrl: string, quality = 0.9): Promise<string> =>
+	new Promise((resolve, reject) => {
+		const img = new Image();
+		img.onload = () => {
+			const canvas = document.createElement('canvas');
+			canvas.width = img.naturalWidth;
+			canvas.height = img.naturalHeight;
+			canvas.getContext('2d')!.drawImage(img, 0, 0);
+			resolve(canvas.toDataURL('image/webp', quality));
+		};
+		img.onerror = reject;
+		img.src = imageUrl;
+	});
+
 export const generateInitialsImage = (name) => {
 	const canvas = document.createElement('canvas');
 	const ctx = canvas.getContext('2d');

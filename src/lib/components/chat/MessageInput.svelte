@@ -40,6 +40,7 @@
 	import {
 		convertHeicToJpeg,
 		compressImage,
+		convertToWebP,
 		createMessagesList,
 		extractContentFromFile,
 		extractCurlyBraceWords,
@@ -763,6 +764,9 @@
 					// Compress the image if settings or config require it
 					imageUrl = await compressImageHandler(imageUrl, $settings, $config);
 
+					// Convert to WebP at 0.9 quality for smaller payload
+					imageUrl = await convertToWebP(imageUrl, 0.9);
+
 					if ($temporaryChatEnabled) {
 						files = [
 							...files,
@@ -773,9 +777,13 @@
 						];
 					} else {
 						const blob = await (await fetch(imageUrl)).blob();
-						const compressedFile = new File([blob], file.name, { type: file.type });
+						const webpFile = new File(
+							[blob],
+							file.name.replace(/\.[^.]+$/, '.webp'),
+							{ type: 'image/webp' }
+						);
 
-						uploadFileHandler(compressedFile, false);
+						uploadFileHandler(webpFile, false);
 					}
 				};
 
