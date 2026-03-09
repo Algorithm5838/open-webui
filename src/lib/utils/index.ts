@@ -362,14 +362,15 @@ async function resizeImageToDataURL(
 	img: HTMLImageElement,
 	width: number,
 	height: number,
-	mimeType = 'image/jpeg'
+	mimeType = 'image/jpeg',
+	quality?: number
 ): Promise<string> {
 	const canvas = document.createElement('canvas');
 	canvas.width = width;
 	canvas.height = height;
 	canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
 
-	const toDataURL = () => canvas.toDataURL(mimeType);
+	const toDataURL = () => canvas.toDataURL(mimeType, quality);
 
 	if (
 		!resizeImageWarmupDone &&
@@ -378,74 +379,84 @@ async function resizeImageToDataURL(
 	) {
 		resizeImageWarmupDone = true;
 		return new Promise((resolve) => {
-			canvas.toBlob((blob) => {
-				if (!blob) {
-					resolve(toDataURL());
-					return;
-				}
-				const reader = new FileReader();
-				reader.onload = () => resolve(String(reader.result));
-				reader.onerror = () => resolve(toDataURL());
-				reader.readAsDataURL(blob);
-			}, mimeType);
+			canvas.toBlob(
+				(blob) => {
+					if (!blob) {
+						resolve(toDataURL());
+						return;
+					}
+					const reader = new FileReader();
+					reader.onload = () => resolve(String(reader.result));
+					reader.onerror = () => resolve(toDataURL());
+					reader.readAsDataURL(blob);
+				},
+				mimeType,
+				quality
+			);
 		});
 	}
 	return Promise.resolve(toDataURL());
 }
 
-export const compressImage = async (imageUrl, maxWidth, maxHeight) => {
+/**
+ * Calculate constrained dimensions preserving aspect ratio (pure function).
+ */
+function calcResize(
+	srcW: number,
+	srcH: number,
+	maxW?: number | null,
+	maxH?: number | null
+): { width: number; height: number; resized: boolean } {
+	let w = srcW,
+		h = srcH;
+	if (maxW && maxH) {
+		if (w > maxW || h > maxH) {
+			if (w / h > maxW / maxH) {
+				h = Math.round((maxW * h) / w);
+				w = maxW;
+			} else {
+				w = Math.round((maxH * w) / h);
+				h = maxH;
+			}
+			return { width: w, height: h, resized: true };
+		}
+	} else if (maxW && w > maxW) {
+		h = Math.round((maxW * h) / w);
+		w = maxW;
+		return { width: w, height: h, resized: true };
+	} else if (maxH && h > maxH) {
+		w = Math.round((maxH * w) / h);
+		h = maxH;
+		return { width: w, height: h, resized: true };
+	}
+	return { width: w, height: h, resized: false };
+}
+
+export const compressImage = async (
+	imageUrl: string,
+	maxWidth?: number | null,
+	maxHeight?: number | null,
+	outputFormat?: string,
+	quality?: number
+) => {
 	return new Promise((resolve, reject) => {
 		const img = new Image();
 		img.onload = async () => {
-			let width = img.width;
-			let height = img.height;
+			const { width, height, resized } = calcResize(img.width, img.height, maxWidth, maxHeight);
 
-			// Maintain aspect ratio while resizing
-
-			if (maxWidth && maxHeight) {
-				// Resize with both dimensions defined (preserves aspect ratio)
-
-				if (width <= maxWidth && height <= maxHeight) {
-					resolve(imageUrl);
-					return;
-				}
-
-				if (width / height > maxWidth / maxHeight) {
-					height = Math.round((maxWidth * height) / width);
-					width = maxWidth;
-				} else {
-					width = Math.round((maxHeight * width) / height);
-					height = maxHeight;
-				}
-			} else if (maxWidth) {
-				// Only maxWidth defined
-
-				if (width <= maxWidth) {
-					resolve(imageUrl);
-					return;
-				}
-
-				height = Math.round((maxWidth * height) / width);
-				width = maxWidth;
-			} else if (maxHeight) {
-				// Only maxHeight defined
-
-				if (height <= maxHeight) {
-					resolve(imageUrl);
-					return;
-				}
-
-				width = Math.round((maxHeight * width) / height);
-				height = maxHeight;
+			if (!resized && !outputFormat) {
+				resolve(imageUrl);
+				return;
 			}
 
-			const mimeType = imageUrl.match(/^data:([^;]+);/)?.[1] ?? 'image/jpeg';
-			resolve(await resizeImageToDataURL(img, width, height, mimeType));
+			const mimeType = outputFormat || (imageUrl.match(/^data:([^;]+);/)?.[1] ?? 'image/jpeg');
+			resolve(await resizeImageToDataURL(img, width, height, mimeType, quality));
 		};
 		img.onerror = (error) => reject(error);
 		img.src = imageUrl;
 	});
 };
+
 export const generateInitialsImage = (name) => {
 	const canvas = document.createElement('canvas');
 	const ctx = canvas.getContext('2d');
