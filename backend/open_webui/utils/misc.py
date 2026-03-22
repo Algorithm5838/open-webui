@@ -276,6 +276,47 @@ def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
     return messages
 
 
+def filter_output_by_content(output: list, content: str) -> list:
+    """
+    Drop output items whose <details> block was removed from content.
+    Matches by id attribute. Falls back to keeping all items for types
+    that don't yet carry id= (legacy content compatibility).
+    """
+    present_ids = set(re.findall(r'<details\b[^>]*\bid="([^"]+)"', content))
+    types_present = set(re.findall(r'<details\b[^>]*\btype="([^"]+)"', content))
+
+    # Types that carry id= in content (vs legacy types without id=).
+    # A type without id= in content is treated as legacy — keep all of that type.
+    types_with_ids: set[str] = set()
+    for m in re.finditer(r'<details\b(?=[^>]*\btype="([^"]+)")(?=[^>]*\bid=)', content):
+        types_with_ids.add(m.group(1))
+
+    # Map output item type → <details> type attribute value
+    DETAILS_TYPE = {
+        'function_call': 'tool_calls',
+        'function_call_output': 'tool_calls',
+        'reasoning': 'reasoning',
+        'open_webui:code_interpreter': 'code_interpreter',
+    }
+
+    filtered = []
+    for item in output:
+        details_type = DETAILS_TYPE.get(item.get('type', ''))
+        if details_type is None:
+            filtered.append(item)  # Not a details-backed type — pass through
+        elif details_type not in types_present:
+            pass  # Type fully removed from content — drop
+        elif details_type not in types_with_ids:
+            filtered.append(item)  # Legacy type (no id=) — keep all
+        else:
+            item_id = item.get('call_id') or item.get('id', '')
+            if item_id in present_ids:
+                filtered.append(item)  # ID present — keep
+            # else: user deleted the <details> block — drop
+
+    return filtered
+
+
 def get_last_user_message(messages: list[dict]) -> Optional[str]:
     message = get_last_user_message_item(messages)
     if message is None:
