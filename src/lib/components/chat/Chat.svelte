@@ -1029,10 +1029,28 @@
 		};
 		init();
 
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') {
+				cancelAnimationFrame(contentsRAF);
+				contentsRAF = null;
+				getContents();
+				const contents = get(artifactContents);
+				if (contents && contents.length > 0 && !get(showControls) && !get(mobile)) {
+					showArtifacts.set(true);
+					showControls.set(true);
+				}
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+
 		return () => {
 			try {
 				clearTimeout(saveControlsTimer);
 				saveControls();
+				cancelAnimationFrame(scrollRAF);
+				cancelAnimationFrame(contentsRAF);
+				scrollRAF = null;
+				contentsRAF = null;
 				if (chatIdProp && !$temporaryChatEnabled) {
 					updateLastReadAt(chatIdProp);
 				}
@@ -1040,6 +1058,7 @@
 				showControlsSubscribe();
 				selectedFolderSubscribe();
 				window.removeEventListener('message', onMessageHandler);
+				document.removeEventListener('visibilitychange', onVisibilityChange);
 				$socket?.off('events', chatEventHandler);
 				$socket?.off('connect', handleSocketConnect);
 				dismissContextCompactionToast();
@@ -1237,11 +1256,14 @@
 
 	const onHistoryChange = (history) => {
 		if (history) {
-			clearTimeout(contentsRAF);
-			contentsRAF = setTimeout(() => {
+			const current = history.messages?.[history.currentId];
+			if (current && current.role !== 'user' && current.done === false) return;
+
+			cancelAnimationFrame(contentsRAF);
+			contentsRAF = requestAnimationFrame(() => {
 				getContents();
 				contentsRAF = null;
-			}, 0);
+			});
 		} else {
 			artifactContents.set([]);
 		}
