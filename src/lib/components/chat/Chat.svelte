@@ -805,6 +805,20 @@
 		};
 		init();
 
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') {
+				cancelAnimationFrame(contentsRAF);
+				contentsRAF = null;
+				getContents();
+				const contents = get(artifactContents);
+				if (contents && contents.length > 0 && !get(showControls) && !get(mobile)) {
+					showArtifacts.set(true);
+					showControls.set(true);
+				}
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+
 		return () => {
 			try {
 				if (chatIdProp && !$temporaryChatEnabled) {
@@ -814,6 +828,7 @@
 				showControlsSubscribe();
 				selectedFolderSubscribe();
 				window.removeEventListener('message', onMessageHandler);
+				document.removeEventListener('visibilitychange', onVisibilityChange);
 				$socket?.off('events', chatEventHandler);
 				audioQueueInstance?.destroy();
 				audioQueue.set(null);
@@ -1009,11 +1024,11 @@
 
 	const onHistoryChange = (history) => {
 		if (history) {
-			clearTimeout(contentsRAF);
-			contentsRAF = setTimeout(() => {
+			cancelAnimationFrame(contentsRAF);
+			contentsRAF = requestAnimationFrame(() => {
 				getContents();
 				contentsRAF = null;
-			}, 0);
+			});
 		} else {
 			artifactContents.set([]);
 		}
