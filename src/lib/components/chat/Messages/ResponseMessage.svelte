@@ -127,7 +127,13 @@
 			// Fast path: O(1) check on the fields that change most often (content during streaming, done at end)
 			// Avoids 2x O(n) JSON.stringify calls that are always true during streaming anyway
 			if (message.content !== source.content || message.done !== source.done) {
-				message = structuredClone(source);
+				if (!message.done && source.done) {
+					// done just flipped true: full clone to capture info, usage, selectedModelId, etc.
+					message = structuredClone(source);
+				} else {
+					// mid-stream content update: cheap shallow copy, only hot fields change
+					message = { ...message, content: source.content, done: source.done };
+				}
 			} else if (!equal(message, source)) {
 				// Slow path: full comparison for infrequent changes (sources, annotations, status, etc.)
 				message = structuredClone(source);
