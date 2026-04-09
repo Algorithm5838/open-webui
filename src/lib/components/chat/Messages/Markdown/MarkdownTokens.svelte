@@ -6,7 +6,7 @@
 	import fileSaver from 'file-saver';
 	const { saveAs } = fileSaver;
 
-	import { marked, type Token } from 'marked';
+	import { type Token } from 'marked';
 	import { copyToClipboard, unescapeHtml } from '$lib/utils';
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
@@ -399,7 +399,7 @@
 							<div class="mb-1.5" slot="content">
 								<svelte:self
 									id={`${id}-${tokenIdx}-${detailIdx}-d`}
-									tokens={marked.lexer(decode(detailToken.text))}
+									tokens={detailToken.tokens ?? []}
 									attributes={detailToken?.attributes}
 									{done}
 									{editCodeBlock}
@@ -447,7 +447,7 @@
 				<div class=" mb-1.5" slot="content">
 					<svelte:self
 						id={`${id}-${tokenIdx}-d`}
-						tokens={marked.lexer(decode(token.text))}
+						tokens={token.tokens ?? []}
 						attributes={token?.attributes}
 						{done}
 						{editCodeBlock}
