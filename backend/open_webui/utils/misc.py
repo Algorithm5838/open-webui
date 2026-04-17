@@ -148,19 +148,22 @@ def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
     messages = []
     pending_tool_calls = []
     pending_content = []
+    pending_reasoning_details = None
 
     def flush_pending():
-        nonlocal pending_content, pending_tool_calls
-        if pending_content or pending_tool_calls:
+        nonlocal pending_content, pending_tool_calls, pending_reasoning_details
+        if pending_content or pending_tool_calls or pending_reasoning_details:
             messages.append(
                 {
                     'role': 'assistant',
                     'content': '\n'.join(pending_content) if pending_content else '',
                     **({'tool_calls': pending_tool_calls} if pending_tool_calls else {}),
+                    **({'reasoning_details': pending_reasoning_details} if pending_reasoning_details else {}),
                 }
             )
             pending_content = []
             pending_tool_calls = []
+            pending_reasoning_details = None
 
     for item in output:
         item_type = item.get('type', '')
@@ -241,16 +244,31 @@ def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
                     elif 'text' in part:
                         reasoning_text += part.get('text', '')
 
+                # Read raw_details before reasoning_text to use it as a guard.
+                raw_details = item.get('reasoning_details')
+
                 if reasoning_text:
                     start_tag = item.get('start_tag', '<think>')
                     end_tag = item.get('end_tag', '</think>')
-                    pending_content.append(f'{start_tag}{reasoning_text}{end_tag}')
+                    # Skip <think> embed for structured-details models.
+                    if not raw_details:
+                        pending_content.append(f'{start_tag}{reasoning_text}{end_tag}')
                     # NOTE: Some providers (e.g. Moonshot/Kimi K2.5) require
                     # reasoning_content as a top-level field on assistant
                     # messages.  This should be handled externally via a
                     # pipeline filter or connection-level middleware, not
                     # here — adding it universally breaks strict providers
                     # (OpenAI, Vertex AI, Azure) that reject unknown fields.
+
+                # Preserve raw structured reasoning_details for provider round-trip
+                if raw_details:
+                    if pending_reasoning_details is None:
+                        pending_reasoning_details = list(raw_details) if isinstance(raw_details, list) else [raw_details]
+                    elif isinstance(pending_reasoning_details, list):
+                        if isinstance(raw_details, list):
+                            pending_reasoning_details.extend(raw_details)
+                        else:
+                            pending_reasoning_details.append(raw_details)
             # else: skip reasoning blocks for normal LLM messages
 
         elif item_type == 'open_webui:code_interpreter':
