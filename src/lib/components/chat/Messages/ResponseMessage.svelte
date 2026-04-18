@@ -758,6 +758,7 @@
 										id="message-edit-{message.id}"
 										bind:this={editTextAreaElement}
 										class=" bg-transparent outline-hidden w-full resize-none"
+										dir={($settings?.chatDirection ?? 'auto').toLowerCase()}
 										bind:value={editedContent}
 										on:input={(e) => {
 											const messagesContainer = document.getElementById('messages-container');
