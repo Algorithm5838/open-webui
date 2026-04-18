@@ -716,11 +716,12 @@
 
 						{#if edit === true}
 							<div class="w-full bg-gray-50 dark:bg-gray-800 rounded-3xl px-5 py-3 my-2">
-								<textarea
-									id="message-edit-{message.id}"
-									bind:this={editTextAreaElement}
-									class=" bg-transparent outline-hidden w-full resize-none"
-									bind:value={editedContent}
+							<textarea
+								id="message-edit-{message.id}"
+								bind:this={editTextAreaElement}
+								class=" bg-transparent outline-hidden w-full resize-none"
+								dir={($settings?.chatDirection ?? 'auto').toLowerCase()}
+								bind:value={editedContent}
 									on:input={(e) => {
 										const messagesContainer = document.getElementById('messages-container');
 										const savedScrollTop = messagesContainer?.scrollTop;

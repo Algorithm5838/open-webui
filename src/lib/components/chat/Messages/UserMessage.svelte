@@ -298,11 +298,12 @@
 					{/if}
 
 					<div class="max-h-96 overflow-auto" bind:this={editScrollContainer}>
-						<textarea
-							id="message-edit-{message.id}"
-							bind:this={messageEditTextAreaElement}
-							class=" bg-transparent outline-hidden w-full resize-none"
-							bind:value={editedContent}
+					<textarea
+						id="message-edit-{message.id}"
+						bind:this={messageEditTextAreaElement}
+						class=" bg-transparent outline-hidden w-full resize-none"
+						dir={($settings?.chatDirection ?? 'auto').toLowerCase()}
+						bind:value={editedContent}
 							on:input={(e) => {
 								const messagesContainer = document.getElementById('messages-container');
 								const savedScrollTop = messagesContainer?.scrollTop;
