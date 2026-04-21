@@ -175,6 +175,26 @@
 	let chatFiles = [];
 	let files = [];
 	let params = {};
+	let lastObservedParams = {};
+	let lastObservedChatFiles = [];
+	let controlsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+	$: if (!equal(params, lastObservedParams) || !equal(chatFiles, lastObservedChatFiles)) {
+		lastObservedParams = structuredClone(params);
+		lastObservedChatFiles = structuredClone(chatFiles);
+		if (!loading && !$temporaryChatEnabled && $chatId) {
+			if (controlsSaveTimer !== null) {
+				clearTimeout(controlsSaveTimer);
+			}
+			controlsSaveTimer = setTimeout(() => {
+				controlsSaveTimer = null;
+				saveControlsHandler().catch((err) => {
+					console.error('[saveControlsHandler]', err);
+					toast.error($i18n.t('Failed to save chat controls'));
+				});
+			}, 400);
+		}
+	}
 
 	$: if (chatIdProp) {
 		navigateHandler();
@@ -185,6 +205,12 @@
 		// $chatId still holds the previous chat here — loadChat() updates it.
 		if ($chatId && $chatId !== chatIdProp && !$temporaryChatEnabled) {
 			updateLastReadAt($chatId);
+		}
+
+		if (controlsSaveTimer !== null) {
+			clearTimeout(controlsSaveTimer);
+			controlsSaveTimer = null;
+			await saveControlsHandler().catch((err) => console.error('[saveControlsHandler]', err));
 		}
 
 		loading = true;
@@ -821,6 +847,11 @@
 
 		return () => {
 			try {
+				if (controlsSaveTimer !== null) {
+					clearTimeout(controlsSaveTimer);
+					controlsSaveTimer = null;
+					saveControlsHandler().catch((err) => console.error('[saveControlsHandler]', err));
+				}
 				if (chatIdProp && !$temporaryChatEnabled) {
 					updateLastReadAt(chatIdProp);
 				}
@@ -2730,6 +2761,15 @@
 		await tick();
 
 		return _chatId;
+	};
+
+	const saveControlsHandler = async () => {
+		const _chatId = $chatId;
+		if (!_chatId || $temporaryChatEnabled || loading) return;
+		await updateChatById(localStorage.token, _chatId, {
+			params: params,
+			files: chatFiles
+		});
 	};
 
 	const saveChatHandler = async (_chatId, history) => {
