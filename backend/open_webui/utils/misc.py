@@ -7,6 +7,7 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Union
+from collections import defaultdict
 import json
 import aiohttp
 import mimeparse
@@ -127,6 +128,11 @@ def get_content_from_message(message: dict) -> Optional[str]:
     else:
         return message.get('content')
     return None
+
+
+def output_id(prefix: str) -> str:
+    """Generate OR-style ID: prefix + 24-char hex UUID."""
+    return f'{prefix}_{uuid.uuid4().hex[:24]}'
 
 
 def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
@@ -298,6 +304,181 @@ def convert_output_to_messages(output: list, raw: bool = False) -> list[dict]:
     flush_pending()
 
     return messages
+
+
+# ---------------------------------------------------------------------------
+# Assistant output reconciliation
+# ---------------------------------------------------------------------------
+
+# Mapping from <details type="..."> values to structured output item types.
+DETAIL_TYPE_TO_OUTPUT_TYPES: dict[str, tuple[str, ...]] = {
+    'tool_calls': ('function_call', 'function_call_output'),
+    'reasoning': ('reasoning',),
+    'code_interpreter': ('open_webui:code_interpreter',),
+}
+
+# Regex to split content into alternating text / <details> segments.
+_DETAILS_SPLIT_RE = re.compile(r'(<details\b[^>]*>[\s\S]*?</details>)', re.IGNORECASE)
+
+# Regexes to extract type and id attributes from a <details> opening tag.
+# Using two independent patterns so attribute order does not matter.
+_DETAIL_TYPE_RE = re.compile(r'\btype=["\']([^"\']*)["\']', re.IGNORECASE)
+_DETAIL_ID_RE = re.compile(r'\bid=["\']([^"\']*)["\']', re.IGNORECASE)
+
+
+def _parse_content_segments(content: str) -> tuple[list[tuple[str, Optional[str], Optional[str]]], list[str]]:
+    """Parse content into ordered segments of text and <details> blocks."""
+    parts = _DETAILS_SPLIT_RE.split(content)
+    segments = []
+    for part in parts:
+        if part and part.lstrip().startswith('<details'):
+            # Search only the opening tag to avoid false positives from
+            # id= or type= appearing inside code/body content.
+            opening = re.match(r'<details\b[^>]*>', part.lstrip())
+            tag = opening.group(0) if opening else ''
+            tm = _DETAIL_TYPE_RE.search(tag)
+            im = _DETAIL_ID_RE.search(tag)
+            segments.append(('details', tm.group(1) if tm else '', im.group(1) if im else ''))
+        else:
+            segments.append(('text', None, None))
+    return segments, parts
+
+
+def _build_lookup(output: list) -> tuple[dict, dict]:
+    """Build grouped lookup tables from structured output items."""
+    lookup: dict[str, dict[str, list]] = {}
+    ordinal: dict[str, list[list]] = defaultdict(list)
+
+    for detail_type in DETAIL_TYPE_TO_OUTPUT_TYPES:
+        lookup[detail_type] = {}
+
+    fc_by_call_id: dict[str, dict] = {}
+    fco_by_call_id: dict[str, dict] = {}
+    for item in output:
+        item_type = item.get('type', '')
+        if item_type == 'function_call':
+            call_id = item.get('call_id', '')
+            if call_id:
+                fc_by_call_id[call_id] = item
+        elif item_type == 'function_call_output':
+            call_id = item.get('call_id', '')
+            if call_id:
+                fco_by_call_id[call_id] = item
+
+    for call_id, fc_item in fc_by_call_id.items():
+        bundle = [fc_item]
+        fco = fco_by_call_id.get(call_id)
+        if fco:
+            bundle.append(fco)
+        lookup['tool_calls'][call_id] = bundle
+        ordinal['tool_calls'].append(bundle)
+
+    for item in output:
+        item_type = item.get('type', '')
+        item_id = item.get('id', '')
+
+        if item_type == 'reasoning':
+            bundle = [item]
+            if item_id:
+                lookup['reasoning'][item_id] = bundle
+            ordinal['reasoning'].append(bundle)
+
+        elif item_type == 'open_webui:code_interpreter':
+            bundle = [item]
+            if item_id:
+                lookup['code_interpreter'][item_id] = bundle
+            ordinal['code_interpreter'].append(bundle)
+
+    return lookup, ordinal
+
+
+def _make_message_item(text: str) -> dict:
+    """Create a message output item from plain text."""
+    return {
+        'type': 'message',
+        'id': output_id('msg'),
+        'status': 'completed',
+        'role': 'assistant',
+        'content': [{'type': 'output_text', 'text': text}],
+    }
+
+
+def reconcile_assistant_output(message: dict) -> Optional[list]:
+    """Reconcile an assistant message's output with its edited content.
+
+    Returns None if no output exists, otherwise a list of effective output
+    items that match the blocks still present in the edited content.
+    """
+    output = message.get('output')
+    if not output or not isinstance(output, list):
+        return None
+
+    content = message.get('content')
+    if not isinstance(content, str) or not content.strip():
+        return None
+
+    segments, raw_parts = _parse_content_segments(content)
+
+    lookup, ordinal = _build_lookup(output)
+
+    emitted_ids: set[str] = set()
+    ordinal_counters: dict[str, int] = defaultdict(int)
+
+    effective_output: list = []
+    pending_text: list[str] = []
+    raw_idx = 0
+
+    def flush_text():
+        if pending_text:
+            joined = '\n'.join(pending_text).strip()
+            if joined:
+                effective_output.append(_make_message_item(joined))
+            pending_text.clear()
+
+    for seg_type, detail_type, detail_id in segments:
+        raw_part = raw_parts[raw_idx] if raw_idx < len(raw_parts) else ''
+        raw_idx += 1
+
+        if seg_type == 'text':
+            text = raw_part.strip()
+            if text:
+                pending_text.append(text)
+            continue
+
+        if detail_type not in DETAIL_TYPE_TO_OUTPUT_TYPES:
+            pending_text.append(raw_part)
+            continue
+
+        bundle = None
+        match_key = None
+
+        if detail_id and detail_id in lookup.get(detail_type, {}):
+            if detail_id not in emitted_ids:
+                bundle = lookup[detail_type][detail_id]
+                match_key = detail_id
+
+        if bundle is None and not detail_id:
+            idx = ordinal_counters[detail_type]
+            ordinal_list = ordinal.get(detail_type, [])
+            if idx < len(ordinal_list):
+                candidate = ordinal_list[idx]
+                candidate_id = candidate[0].get('id', '') or candidate[0].get('call_id', '')
+                if candidate_id not in emitted_ids:
+                    bundle = candidate
+                    match_key = candidate_id
+            ordinal_counters[detail_type] = idx + 1
+
+        if bundle is not None:
+            flush_text()
+            effective_output.extend(bundle)
+            if match_key:
+                emitted_ids.add(match_key)
+        else:
+            pending_text.append(raw_part)
+
+    flush_text()
+
+    return effective_output
 
 
 def get_last_user_message(messages: list[dict]) -> Optional[str]:

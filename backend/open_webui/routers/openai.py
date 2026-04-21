@@ -64,6 +64,7 @@ from open_webui.utils.session_pool import (
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.headers import include_user_info_headers
 from open_webui.utils.anthropic import is_anthropic_url, get_anthropic_models
+from open_webui.utils.misc import reconcile_assistant_output
 
 log = logging.getLogger(__name__)
 
@@ -877,7 +878,10 @@ def convert_to_responses_payload(payload: dict) -> dict:
         # Check for stored output items (from previous Responses API turn)
         stored_output = msg.get('output')
         if stored_output and isinstance(stored_output, list):
-            input_items.extend(_normalize_stored_item(item) for item in stored_output)
+            # Reconcile output with edited content before replay
+            effective_output = reconcile_assistant_output(msg)
+            active_output = effective_output if effective_output is not None else stored_output
+            input_items.extend(_normalize_stored_item(item) for item in active_output)
             continue
 
         if role == 'system':

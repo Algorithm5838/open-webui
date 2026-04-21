@@ -98,6 +98,8 @@ from open_webui.utils.misc import (
     convert_logit_bias_input_to_json,
     get_content_from_message,
     convert_output_to_messages,
+    output_id,
+    reconcile_assistant_output,
     strip_empty_content_blocks,
 )
 from open_webui.utils.tools import (
@@ -162,11 +164,6 @@ DEFAULT_REASONING_TAGS = [
 ]
 DEFAULT_SOLUTION_TAGS = [('<|begin_of_solution|>', '<|end_of_solution|>')]
 DEFAULT_CODE_INTERPRETER_TAGS = [('<code_interpreter>', '</code_interpreter>')]
-
-
-def output_id(prefix: str) -> str:
-    """Generate OR-style ID: prefix + 24-char hex UUID."""
-    return f'{prefix}_{uuid4().hex[:24]}'
 
 
 def _split_tool_calls(
@@ -572,13 +569,16 @@ def serialize_output(output: list) -> str:
                 )
             )
 
+            item_id = item.get('id', '')
+            id_attr = f' id="{item_id}"' if item_id else ''
+
             if status == 'completed' or duration is not None or not is_last_item:
                 parts.append(
-                    f'<details type="reasoning" done="true" duration="{duration or 0}">\n<summary>Thought for {duration or 0} seconds</summary>\n{display}\n</details>'
+                    f'<details type="reasoning"{id_attr} done="true" duration="{duration or 0}">\n<summary>Thought for {duration or 0} seconds</summary>\n{display}\n</details>'
                 )
             else:
                 parts.append(
-                    f'<details type="reasoning" done="false">\n<summary>Thinking…</summary>\n{display}\n</details>'
+                    f'<details type="reasoning"{id_attr} done="false">\n<summary>Thinking…</summary>\n{display}\n</details>'
                 )
 
         elif item_type == 'open_webui:code_interpreter':
@@ -617,13 +617,16 @@ def serialize_output(output: list) -> str:
                     output_json = json.dumps({'result': str(ci_output)}, ensure_ascii=False)
                 output_attr = f' output="{html.escape(output_json)}"'
 
+            item_id = item.get('id', '')
+            id_attr = f' id="{item_id}"' if item_id else ''
+
             if status == 'completed' or duration is not None or not is_last_item:
                 parts.append(
-                    f'<details type="code_interpreter" done="true" duration="{duration or 0}"{output_attr}>\n<summary>Analyzed</summary>\n{display}\n</details>'
+                    f'<details type="code_interpreter"{id_attr} done="true" duration="{duration or 0}"{output_attr}>\n<summary>Analyzed</summary>\n{display}\n</details>'
                 )
             else:
                 parts.append(
-                    f'<details type="code_interpreter" done="false"{output_attr}>\n<summary>Analyzing…</summary>\n{display}\n</details>'
+                    f'<details type="code_interpreter"{id_attr} done="false"{output_attr}>\n<summary>Analyzing…</summary>\n{display}\n</details>'
                 )
 
     return '\n'.join(parts).strip()
@@ -2207,13 +2210,23 @@ def process_messages_with_output(messages: list[dict]) -> list[dict]:
 
     For assistant messages with 'output' field, produces properly formatted
     OpenAI-style messages (tool_calls + tool results). Strips 'output' before LLM.
+
+    Output is reconciled with edited content before conversion so that
+    user edits (text changes, deleted <details> blocks) are respected.
     """
     processed = []
 
     for message in messages:
         if message.get('role') == 'assistant' and message.get('output'):
+            # Reconcile output with edited content before conversion
+            effective_output = reconcile_assistant_output(message)
+            if effective_output is not None:
+                active_output = effective_output
+            else:
+                active_output = message['output']
+
             # Use output items for clean OpenAI-format messages
-            output_messages = convert_output_to_messages(message['output'], raw=True)
+            output_messages = convert_output_to_messages(active_output, raw=True)
             if output_messages:
                 processed.extend(output_messages)
                 continue
