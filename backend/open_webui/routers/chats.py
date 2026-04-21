@@ -37,6 +37,7 @@ from pydantic import BaseModel
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_permission, filter_allowed_access_grants
+from open_webui.utils.misc import reconcile_assistant_output
 
 log = logging.getLogger(__name__)
 
@@ -930,6 +931,16 @@ async def update_chat_by_id(
     chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
     if chat:
         updated_chat = {**chat.chat, **form_data.chat}
+
+        # Reconcile assistant message output with edited content so that
+        # stale structured output does not linger in stored history.
+        messages = updated_chat.get('history', {}).get('messages', {})
+        for msg in messages.values():
+            if msg.get('role') == 'assistant' and msg.get('output'):
+                effective = reconcile_assistant_output(msg)
+                if effective is not None:
+                    msg['output'] = effective
+
         chat = await Chats.update_chat_by_id(id, updated_chat, db=db)
         return ChatResponse(**chat.model_dump())
     else:
