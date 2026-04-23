@@ -498,6 +498,10 @@
 					message.content += data.content;
 				} else if (type === 'chat:message' || type === 'replace') {
 					message.content = data.content;
+					// Non-current content patch; invalidate the stable cache.
+					if (event.message_id !== history.currentId) {
+						stableArtifactCurrentId = null;
+					}
 				} else if (type === 'chat:message:files' || type === 'files') {
 					message.files = data.files;
 				} else if (type === 'chat:message:tasks') {
@@ -533,6 +537,10 @@
 									originalContent: existing.content,
 									...msg
 								};
+								// Non-current content patch; invalidate the stable cache.
+								if (msg.id !== history.currentId) {
+									stableArtifactCurrentId = null;
+								}
 							}
 						}
 					}
@@ -1055,32 +1063,13 @@
 		}
 	};
 
-	const onHistoryChange = (history) => {
-		if (history) {
-			cancelAnimationFrame(contentsRAF);
-			contentsRAF = requestAnimationFrame(() => {
-				getContents();
-				contentsRAF = null;
-			});
-		} else {
-			artifactContents.set([]);
-		}
-	};
+	const extractArtifactItemsFromContent = (content: string): ArtifactItem[] => {
+		const { codeBlocks, htmlGroups } = getCodeBlockContents(content);
+		const items: ArtifactItem[] = [];
 
-	$: onHistoryChange(history);
-
-	const getContents = () => {
-		const messages = history ? createMessagesList(history, history.currentId) : [];
-		let contents = [];
-		messages.forEach((message) => {
-			if (message?.role !== 'user' && message?.content) {
-				const { codeBlocks: codeBlocks, htmlGroups: htmlGroups } = getCodeBlockContents(
-					message.content
-				);
-
-				if (htmlGroups && htmlGroups.length > 0) {
-					htmlGroups.forEach((group) => {
-						const renderedContent = `
+		if (htmlGroups && htmlGroups.length > 0) {
+			htmlGroups.forEach((group) => {
+				const renderedContent = `
                         <!DOCTYPE html>
                         <html lang="en">
                         <head>
@@ -1103,20 +1092,76 @@
                         </body>
                         </html>
                     `;
-						contents = [...contents, { type: 'iframe', content: renderedContent }];
-					});
-				} else {
-					// Check for SVG content
-					for (const block of codeBlocks) {
-						if (block.lang === 'svg' || (block.lang === 'xml' && block.code.includes('<svg'))) {
-							contents = [...contents, { type: 'svg', content: block.code }];
-						}
-					}
+				items.push({ type: 'iframe', content: renderedContent });
+			});
+		} else {
+			for (const block of codeBlocks) {
+				if (block.lang === 'svg' || (block.lang === 'xml' && block.code.includes('<svg'))) {
+					items.push({ type: 'svg', content: block.code });
 				}
 			}
-		});
+		}
 
+		return items;
+	};
+
+	const onHistoryChange = (history) => {
+		if (!history) {
+			stableArtifactContents = [];
+			stableArtifactCurrentId = null;
+			artifactContents.set([]);
+			return;
+		}
+
+		const currentMsg = history.currentId ? history.messages[history.currentId] : null;
+		const isStreamingAssistant = currentMsg?.role === 'assistant' && !currentMsg.done;
+
+		cancelAnimationFrame(contentsRAF);
+		contentsRAF = requestAnimationFrame(() => {
+			isStreamingAssistant ? getStreamingContents() : getContents();
+			contentsRAF = null;
+		});
+	};
+
+	$: onHistoryChange(history);
+
+	// Full reconcile; resets stable cache so the next streaming session starts clean.
+	const getContents = () => {
+		const messages = history ? createMessagesList(history, history.currentId) : [];
+		const contents: ArtifactItem[] = [];
+
+		for (const message of messages) {
+			if (message?.role !== 'user' && message?.content) {
+				contents.push(...extractArtifactItemsFromContent(message.content));
+			}
+		}
+
+		stableArtifactContents = [];
+		stableArtifactCurrentId = null;
 		artifactContents.set(contents);
+	};
+
+	// Streaming hot path; only parses the current message per frame.
+	// Rebuilds the stable cache once at the start of each streaming session.
+	const getStreamingContents = () => {
+		const currentMsg = history.currentId ? history.messages[history.currentId] : null;
+
+		if (stableArtifactCurrentId !== history.currentId) {
+			const messages = history ? createMessagesList(history, history.currentId) : [];
+			stableArtifactContents = [];
+			for (const message of messages) {
+				if (message.id !== history.currentId && message?.role !== 'user' && message?.content) {
+					stableArtifactContents.push(...extractArtifactItemsFromContent(message.content));
+				}
+			}
+			stableArtifactCurrentId = history.currentId;
+		}
+
+		const streamingItems = currentMsg?.content
+			? extractArtifactItemsFromContent(currentMsg.content)
+			: [];
+
+		artifactContents.set([...stableArtifactContents, ...streamingItems]);
 	};
 
 	//////////////////////////
@@ -1459,8 +1504,12 @@
 		}
 	};
 
+	type ArtifactItem = { type: string; content: string };
+
 	let scrollRAF = null;
 	let contentsRAF = null;
+	let stableArtifactContents: ArtifactItem[] = [];
+	let stableArtifactCurrentId: string | null = null;
 	const scheduleScrollToBottom = () => {
 		if (!scrollRAF) {
 			scrollRAF = requestAnimationFrame(async () => {
