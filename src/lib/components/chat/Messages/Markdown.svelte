@@ -85,7 +85,7 @@
 	$: updateHandler(content);
 
 	// Throttle parsing to once per animation frame while streaming
-	$: onDestroy(() => {
+	onDestroy(() => {
 		cancelAnimationFrame(pendingUpdate);
 	});
 </script>
