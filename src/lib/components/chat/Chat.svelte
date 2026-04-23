@@ -847,6 +847,10 @@
 
 		return () => {
 			try {
+				cancelAnimationFrame(scrollRAF);
+				cancelAnimationFrame(contentsRAF);
+				scrollRAF = null;
+				contentsRAF = null;
 				if (controlsSaveTimer !== null) {
 					clearTimeout(controlsSaveTimer);
 					controlsSaveTimer = null;
