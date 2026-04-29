@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import Search from '$lib/components/icons/Search.svelte';
@@ -66,7 +68,7 @@
 					<div class=" flex justify-center items-center gap-3">
 						<div class="w-fit">
 							<img
-								src="https://www.google.com/s2/favicons?sz=32&domain={item.link}"
+								src={`${WEBUI_API_BASE_URL}/utils/favicon?url=${encodeURIComponent(item.link)}`}
 								alt="{item?.title ?? item.link} favicon"
 								class="size-3.5"
 							/>
@@ -106,7 +108,7 @@
 					<div class=" flex justify-center items-center gap-3">
 						<div class="w-fit">
 							<img
-								src="https://www.google.com/s2/favicons?sz=32&domain={url}"
+								src={`${WEBUI_API_BASE_URL}/utils/favicon?url=${encodeURIComponent(url)}`}
 								alt="{url} favicon"
 								class="size-3.5"
 							/>
