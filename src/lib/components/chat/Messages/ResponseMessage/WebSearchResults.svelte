@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import Search from '$lib/components/icons/Search.svelte';
@@ -66,9 +68,12 @@
 					<div class=" flex justify-center items-center gap-3">
 						<div class="w-fit">
 							<img
-								src="https://www.google.com/s2/favicons?sz=32&domain={item.link}"
+								src={`${WEBUI_API_BASE_URL}/utils/favicon?url=${encodeURIComponent(item.link)}`}
 								alt="{item?.title ?? item.link} favicon"
 								class="size-3.5"
+								on:error={(e) => {
+									e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E";
+								}}
 							/>
 						</div>
 
@@ -106,9 +111,12 @@
 					<div class=" flex justify-center items-center gap-3">
 						<div class="w-fit">
 							<img
-								src="https://www.google.com/s2/favicons?sz=32&domain={url}"
+								src={`${WEBUI_API_BASE_URL}/utils/favicon?url=${encodeURIComponent(url)}`}
 								alt="{url} favicon"
 								class="size-3.5"
+								on:error={(e) => {
+									e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E";
+								}}
 							/>
 						</div>
 

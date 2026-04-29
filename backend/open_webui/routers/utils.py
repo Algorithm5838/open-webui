@@ -10,6 +10,7 @@ from open_webui.models.chats import ChatTitleMessagesForm
 from open_webui.models.config import Config
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.code_interpreter import execute_code_jupyter
+from open_webui.utils.favicon import get_favicon as _favicon_handler
 from open_webui.utils.misc import get_gravatar_url
 from open_webui.utils.pdf_generator import PDFGenerator
 from pydantic import BaseModel
@@ -110,3 +111,9 @@ async def download_db(user=Depends(get_admin_user)):
         media_type='application/octet-stream',
         filename='webui.db',
     )
+
+
+@router.get('/favicon')
+async def get_favicon(request: Request, url: str = '', user=Depends(get_verified_user)):
+    """Favicon proxy; always returns a valid image response."""
+    return await _favicon_handler(request, url)
