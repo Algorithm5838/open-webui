@@ -292,6 +292,32 @@ class ChatTable:
 
         return changed
 
+    def _normalize_assistant_content_from_output(self, chat: dict, prior_chat: dict) -> dict:
+        """Rewrite assistant 'content' from 'output' when 'output' has changed.
+
+        Skipping unchanged messages preserves user-typed text on messages
+        with empty or absent 'output'.
+        """
+        from open_webui.utils.middleware import serialize_output
+
+        history = (chat or {}).get('history') or {}
+        messages = history.get('messages')
+        if not isinstance(messages, dict):
+            return chat
+
+        prior_messages = ((prior_chat or {}).get('history') or {}).get('messages') or {}
+
+        for message_id, message in messages.items():
+            if not (isinstance(message, dict) and message.get('role') == 'assistant'):
+                continue
+            new_output = message.get('output')
+            if not isinstance(new_output, list):
+                continue
+            old_output = (prior_messages.get(message_id) or {}).get('output')
+            if new_output != old_output:
+                message['content'] = serialize_output(new_output)
+        return chat
+
     async def insert_new_chat(
         self, id: str, user_id: str, form_data: ChatForm, db: Optional[AsyncSession] = None
     ) -> Optional[ChatModel]:
@@ -395,6 +421,7 @@ class ChatTable:
                     (chat_item.chat or {}).get('history', {}).get('messages', {}) or {}
                 )
 
+                chat = self._normalize_assistant_content_from_output(chat, chat_item.chat)
                 chat_item.chat = self._clean_null_bytes(chat)
                 chat_item.title = self._clean_null_bytes(chat['title']) if 'title' in chat else 'New Chat'
 
