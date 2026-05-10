@@ -387,12 +387,50 @@ class ChatTable:
         try:
             async with get_async_db_context(db) as db:
                 chat_item = await db.get(Chat, id)
+                if chat_item is None:
+                    return None
+
+                # Snapshot for the post-commit row diff.
+                prior_messages = (
+                    (chat_item.chat or {}).get('history', {}).get('messages', {}) or {}
+                )
+
                 chat_item.chat = self._clean_null_bytes(chat)
                 chat_item.title = self._clean_null_bytes(chat['title']) if 'title' in chat else 'New Chat'
 
                 chat_item.updated_at = int(time.time())
 
                 await db.commit()
+
+                # Reconcile chat_message rows with the just-written blob.
+                try:
+                    new_messages = (chat.get('history', {}) or {}).get('messages', {}) or {}
+
+                    for message_id, message in new_messages.items():
+                        if (
+                            isinstance(message, dict)
+                            and message.get('role')
+                            and prior_messages.get(message_id) != message
+                        ):
+                            await ChatMessages.upsert_message(
+                                message_id=message_id,
+                                chat_id=id,
+                                user_id=chat_item.user_id,
+                                data=message,
+                                db=db,
+                            )
+
+                    removed_message_ids = set(prior_messages.keys()) - set(new_messages.keys())
+                    if removed_message_ids:
+                        composite_ids = {f'{id}-{mid}' for mid in removed_message_ids}
+                        await db.execute(
+                            delete(ChatMessage)
+                            .where(ChatMessage.chat_id == id)
+                            .where(ChatMessage.id.in_(composite_ids))
+                        )
+                        await db.commit()
+                except Exception as e:
+                    log.warning(f'Failed to sync chat_message rows: {e}')
 
                 return ChatModel.model_validate(chat_item)
         except Exception:
