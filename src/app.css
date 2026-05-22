@@ -386,6 +386,11 @@ input[type='number'] {
 	@apply h-full min-h-fit max-h-full whitespace-pre-wrap;
 }
 
+.ProseMirror p {
+	unicode-bidi: plaintext;
+	text-align: start;
+}
+
 .ProseMirror:focus {
 	outline: none;
 }
