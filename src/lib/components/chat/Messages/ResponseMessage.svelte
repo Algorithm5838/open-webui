@@ -133,7 +133,13 @@
 				message.done !== source.done ||
 				message.output?.length !== source.output?.length
 			) {
-				message = structuredClone(source);
+				if (!message.done && source.done) {
+					// done just flipped: full clone to snapshot final state (info, usage, etc.)
+					message = structuredClone(source);
+				} else {
+					// mid-stream: shallow copy keeps all fields fresh without deep recursion
+					message = { ...source };
+				}
 			} else if (!equal(message, source)) {
 				// Slow path: full comparison for infrequent changes (sources, annotations, status, etc.)
 				message = structuredClone(source);

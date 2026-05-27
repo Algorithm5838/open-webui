@@ -475,12 +475,8 @@
 				const type = event?.data?.type ?? null;
 				const data = event?.data?.data ?? null;
 
-				if (type === 'status') {
-					if (message?.statusHistory) {
-						message.statusHistory.push(data);
-					} else {
-						message.statusHistory = [data];
-					}
+			if (type === 'status') {
+					message.statusHistory = [...(message?.statusHistory ?? []), data];
 				} else if (type === 'chat:completion') {
 					chatCompletionEventHandler(data, message, event.chat_id);
 				} else if (type === 'chat:tasks:cancel') {
