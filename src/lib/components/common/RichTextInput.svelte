@@ -37,6 +37,13 @@
 	});
 	turndownService.escape = (string) => string;
 
+	// Turndown serializes each <br> as a Markdown "  \n" hard break, leaving
+	// invisible trailing spaces at line breaks and on blank lines. Strip trailing
+	// whitespace from every line, including inside fenced code blocks. markdownlint
+	// (MD009) preserves it there for whitespace-sensitive languages, but a chat
+	// message is not source code, so trimming uniformly is simpler and safe here.
+	const stripTrailingWhitespace = (md: string): string => md.replace(/[ \t]+$/gm, '');
+
 	// Produce single newlines between paragraphs instead of double.
 	// TipTap wraps every line in <p> tags; the default Turndown rule emits
 	// \n\n around each paragraph which then required a destructive
@@ -711,7 +718,7 @@
 					try {
 						// Try parsing the value
 						return marked.parse(value.replaceAll(`\n<br/>`, `<br/>`), {
-							breaks: false
+							breaks: true
 						});
 					} catch (error) {
 						// If no attempts remain, fallback to plain text
@@ -885,26 +892,30 @@
 				jsonValue = editor.getJSON();
 
 				if (richText) {
-					mdValue = turndownService
-						.turndown(
-							htmlValue
-								.replace(/<p><\/p>/g, '<br/>')
-								.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
-						)
-						.replace(/\u00a0/g, ' ');
+					mdValue = stripTrailingWhitespace(
+						turndownService
+							.turndown(
+								htmlValue
+									.replace(/<p><\/p>/g, '<br/>')
+									.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
+							)
+							.replace(/\u00a0/g, ' ')
+					);
 				} else {
-					mdValue = turndownService
-						.turndown(
-							htmlValue
-								// Replace empty paragraphs with line breaks
-								.replace(/<p><\/p>/g, '<br/>')
-								// Replace multiple spaces with non-breaking spaces
-								.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
-								// Replace tabs with non-breaking spaces (preserve indentation)
-								.replace(/\t/g, '\u00a0\u00a0\u00a0\u00a0') // 1 tab = 4 spaces
-						)
-						// Convert non-breaking spaces back to regular spaces for markdown
-						.replace(/\u00a0/g, ' ');
+					mdValue = stripTrailingWhitespace(
+						turndownService
+							.turndown(
+								htmlValue
+									// Replace empty paragraphs with line breaks
+									.replace(/<p><\/p>/g, '<br/>')
+									// Replace multiple spaces with non-breaking spaces
+									.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
+									// Replace tabs with non-breaking spaces (preserve indentation)
+									.replace(/\t/g, '\u00a0\u00a0\u00a0\u00a0') // 1 tab = 4 spaces
+							)
+							// Convert non-breaking spaces back to regular spaces for markdown
+							.replace(/\u00a0/g, ' ')
+					);
 				}
 
 				onChange({
@@ -1267,14 +1278,16 @@
 
 		const jsonValue = editor.getJSON();
 		const htmlValue = editor.getHTML();
-		let mdValue = turndownService
-			.turndown(
-				(preserveBreaks ? htmlValue.replace(/<p><\/p>/g, '<br/>') : htmlValue).replace(
-					/ {2,}/g,
-					(m) => m.replace(/ /g, '\u00a0')
+		let mdValue = stripTrailingWhitespace(
+			turndownService
+				.turndown(
+					(preserveBreaks ? htmlValue.replace(/<p><\/p>/g, '<br/>') : htmlValue).replace(
+						/ {2,}/g,
+						(m) => m.replace(/ /g, '\u00a0')
+					)
 				)
-			)
-			.replace(/\u00a0/g, ' ');
+				.replace(/\u00a0/g, ' ')
+		);
 
 		if (value === '') {
 			editor.commands.clearContent(); // Clear content if value is empty
@@ -1300,7 +1313,7 @@
 						preserveBreaks
 							? value
 							: marked.parse(value.replaceAll(`\n<br/>`, `<br/>`), {
-									breaks: false
+									breaks: true
 								})
 					);
 
