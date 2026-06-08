@@ -36,7 +36,7 @@
 		aria-label={$i18n.t('Show image preview')}
 		type="button"
 	>
-		<img src={_src} {alt} class={imageClassName} draggable="false" data-cy="image" />
+		<img src={_src} {alt} decoding="async" class={imageClassName} draggable="false" data-cy="image" />
 	</button>
 
 	{#if dismissible}
