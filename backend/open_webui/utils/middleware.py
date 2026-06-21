@@ -3710,6 +3710,10 @@ async def streaming_chat_response_handler(response, ctx):
                             before_tag = item_text[: match.start()]
                             after_tag = item_text[match.end() :]
 
+                            # Tag in prose text, skip it.
+                            if before_tag.strip():
+                                continue
+
                             # Keep only text before the tag in the message
                             set_last_text(output, before_tag)
 
@@ -4314,6 +4318,15 @@ async def streaming_chat_response_handler(response, ctx):
                                         or delta.get('thinking')
                                     )
                                     reasoning_details = delta.get('reasoning_details')
+
+                                    # Native counterpart of `before_tag.strip()`: skip reasoning that
+                                    # arrives once the answer has begun.
+                                    if reasoning_content and output and output[-1].get('type') == 'message' and ''.join(
+                                        p.get('text', '') for p in output[-1].get('content', [])
+                                    ).strip():
+                                        reasoning_content = ''
+                                        reasoning_details = None
+
                                     if reasoning_content or reasoning_details:
                                         reasoning_item = (
                                             next(
