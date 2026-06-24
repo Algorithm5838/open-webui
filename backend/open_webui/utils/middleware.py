@@ -3873,7 +3873,12 @@ async def streaming_chat_response_handler(response, ctx):
                 else:
                     output = []
 
-            usage = None
+            # Continue re-sends prior context as prompt; input_tokens is cumulative across calls, not a double-count.
+            usage = (
+                normalize_usage(message['usage'])
+                if existing_output and message and message.get('usage')
+                else None
+            )
             prior_output = []
             last_response_id = None
 
