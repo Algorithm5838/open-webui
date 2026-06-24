@@ -6,7 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import select, delete, func, cast, Integer, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.internal.db import Base, get_async_db_context
-from open_webui.utils.response import merge_usage, normalize_usage
+from open_webui.utils.response import normalize_usage
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     JSON,
@@ -200,11 +200,10 @@ class ChatMessageTable:
                     existing.error = data.get('error')
                 if 'context_summary' in data or 'contextSummary' in data:
                     existing.context_summary = data.get('context_summary') or data.get('contextSummary')
-                # Extract and normalize usage
+                # Full snapshot from the middleware (sole accumulator); overwrite, don't merge.
                 usage = get_usage(data)
                 if usage:
-                    existing_usage = normalize_usage(existing.usage or {}) if existing.usage else {}
-                    existing.usage = existing_usage if usage == existing_usage else merge_usage(existing_usage, usage)
+                    existing.usage = usage
                 existing.updated_at = now
                 await db.commit()
                 await db.refresh(existing)
